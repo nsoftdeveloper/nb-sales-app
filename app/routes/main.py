@@ -3,6 +3,7 @@ from pydantic import ValidationError
 from app.models.user import LoginPayload
 from app import db
 from bson import ObjectId
+from app.models.product import *
 
 main_bp = Blueprint('main_bp', __name__)
 
@@ -12,7 +13,6 @@ def index():
     return jsonify({"mensagen":"Seja bemvindo"})
 
 
-# RF-01: O sistema deve permitir que um usuário se autentique para obter um token
 @main_bp.route('/login', methods=['POST'])
 def login():
     try:
@@ -30,23 +30,18 @@ def login():
     else:
         return jsonify({"mensagen":"Credenciais não válidas"})
          
-
-# RF-02: O sistema deve permitir a listagem de todos os productos
 @main_bp.route('/products')
 def get_products():
     products_cursor = db.products.find({})
-    products_list = []
-    for products in products_cursor:
-        products['_id'] = str(products['_id'])
-        products_list.append(products)
+    products_list = [ProductDBModel(**product).model_dump(by_alias=True, exclude_none=True) for product in products_cursor]
     return jsonify(products_list)
 
-# RF-03: O sistema deve permitir a criacao de um novo producto
+
 @main_bp.route('/products', methods=['POST'])
 def create_product():
     return jsonify({"mensagen":"Essa é a página de produto"})
 
-# RF-04: O sistema deve permitir a visualizacao dos detalhes de um unico producto
+
 @main_bp.route('/product/<string:product_id>')
 def get_product_by_id(product_id):
     try:
@@ -56,8 +51,8 @@ def get_product_by_id(product_id):
     
     product = db.products.find_one({'_id': oid})
     if product:
-        product['_id'] = str(product['_id'])
-        return jsonify(product)
+        product_model = ProductDBModel(**product).model_dump(by_alias=True, exclude_none=True)
+        return jsonify(product_model)
     else:
         return jsonify({"error":f"Produto {product_id} não encontrado"})
 
