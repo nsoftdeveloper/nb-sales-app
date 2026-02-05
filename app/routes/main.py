@@ -1,9 +1,13 @@
-from flask import Blueprint, jsonify, request
+import jwt
+from flask import Blueprint, jsonify, request, current_app
 from pydantic import ValidationError
 from app.models.user import LoginPayload
 from app import db
 from bson import ObjectId
 from app.models.product import *
+from app.decorators import token_required
+from datetime import datetime, timedelta, timezone
+
 
 main_bp = Blueprint('main_bp', __name__)
 
@@ -26,9 +30,18 @@ def login():
            jsonify({"error":"Erro com a execução da app"}), 500
 
     if user_data.username == 'admin' and user_data.password == '123':
-        return jsonify({"mensagen":"Inicio da sessão com sucesso"})
-    else:
-        return jsonify({"mensagen":"Credenciais não válidas"})
+        expire_time = datetime.now(timezone.utc) + timedelta(minutes=30)
+        token = jwt.encode({
+            "use_id": user_data.username,
+            "exp": expire_time
+        },
+        current_app.config['SECRET_KEY'],
+        algorithm='HS256'
+        )
+
+        return jsonify({'access_token': token}), 200
+
+    return jsonify({"mensagen":"Credenciais não válidas"})
          
 @main_bp.route('/products')
 def get_products():
@@ -36,10 +49,19 @@ def get_products():
     products_list = [ProductDBModel(**product).model_dump(by_alias=True, exclude_none=True) for product in products_cursor]
     return jsonify(products_list)
 
-
 @main_bp.route('/products', methods=['POST'])
-def create_product():
-    return jsonify({"mensagen":"Essa é a página de produto"})
+@token_required
+def create_product(token):
+    try:
+        raw_data = request.get_json()
+        product_data = Product(**raw_data)
+    except ValidationError as e:
+        return jsonify({"error": e.errors()}), 400
+    except Exception as e:
+        return jsonify({"error": "Error en la aplicación de product"}), 500
+    
+    result = db.products.insert_one(product_data.model_dump())
+    return jsonify({"product": f"{str(result.inserted_id)}"}), 201
 
 
 @main_bp.route('/product/<string:product_id>')
